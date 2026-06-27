@@ -1,0 +1,8 @@
+host/host
+*.o
+*.out
+build/
+data.csv
+*.csv
+.vscode/
+*.swp
