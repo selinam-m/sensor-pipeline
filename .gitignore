@@ -6,3 +6,4 @@ data.csv
 *.csv
 .vscode/
 *.swp
+host/src/host
