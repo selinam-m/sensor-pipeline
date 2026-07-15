@@ -1,4 +1,5 @@
 #include <Arduino_LSM9DS1.h>
+#include <string.h>
 
 unsigned long lastSample = 0;
 const unsigned long interval = 20;
@@ -6,6 +7,11 @@ const int WINDOW = 31;
 const float pi = 3.14159f;
 const float cutoff_frequency = 0.14f;
 const int M = WINDOW - 1;
+const uint8_t SYNC0 = 0x55;
+const uint8_t SYNC1 = 0xAA;
+
+void send_frame(float x, float y, float z);
+
 
 float kernel[WINDOW];
 
@@ -69,21 +75,35 @@ FIR fx;
 FIR fy;
 FIR fz;
 
+void send_frame(float x, float y, float z) {
+  uint8_t frame [15];
+  frame[0] = SYNC0;
+  frame[1] = SYNC1;
+
+  memcpy(&frame[2], &x, 4);
+  memcpy(&frame[6], &y, 4);
+  memcpy(&frame[10], &z, 4);
+  
+
+  uint8_t checksum = 0;
+  for (int i = 2; i < 14; i++) {
+    checksum ^= frame[i];
+  }
+  frame[14] = checksum;
+
+  Serial.write(frame, 15);
+
+}
+
 void setup() {
-  Serial.begin(9600);
-  Serial.println("Started");
+  Serial.begin(115200);
 
   if (!IMU.begin()) {
     Serial.println("Failed to initialize IMU!");
     while (1);
   }
 
-  Serial.print("Accelerometer sample rate = ");
-  Serial.print(IMU.accelerationSampleRate());
-  Serial.println(" Hz");
-  Serial.println();
-  Serial.println("Acceleration in g's");
-  Serial.println("X\tY\tZ");
+
 
   init_kernel();
   
@@ -106,11 +126,7 @@ void loop() {
       float filter_y = update_FIR(fy, y);
       float filter_z = update_FIR(fz, z);
 
-      Serial.print(filter_x);
-      Serial.print('\t');
-      Serial.print(filter_y);
-      Serial.print('\t');
-      Serial.println(filter_z);
+      send_frame(filter_x, filter_y, filter_z);
     }
   }
   

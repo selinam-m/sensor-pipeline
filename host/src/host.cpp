@@ -8,17 +8,13 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <vector>
+#include <stdint.h>
 
 using namespace std;
 
 void readSerialPort(int serial_port);
-
-struct reading
-{
-    float x;
-    float y;
-    float z;
-};
+float print_float (const uint8_t *src);
 
 
 int main() {
@@ -57,8 +53,8 @@ int main() {
     tty.c_cc[VMIN] = 0;
     tty.c_cc[VTIME] = 10;
 
-    cfsetispeed(&tty, B9600);
-    cfsetospeed(&tty, B9600);
+    cfsetispeed(&tty, B115200);
+    cfsetospeed(&tty, B115200);
 
     if (tcsetattr(serial_port, TCSANOW, &tty) != 0) {
         cout << "Error " << errno << " from tcsetattr: " << strerror(errno) << endl;
@@ -71,8 +67,8 @@ int main() {
 }
 
 void readSerialPort(int serial_port){
-    char buffer [256];
-    string bytes_stored = "";
+    uint8_t buffer [256];
+    std::vector<uint8_t> buf;
     ofstream csv_file("data.csv");
     
 
@@ -91,22 +87,45 @@ void readSerialPort(int serial_port){
         }
 
         if (bytes_read > 0) {
-            bytes_stored.append(buffer, bytes_read);
-            size_t end_position;
-            while ((end_position = bytes_stored.find('\n')) != string::npos) {
-                string temp_line = bytes_stored.substr(0, end_position);
-                bytes_stored.erase(0, end_position + 1);
-                istringstream ss (temp_line);
-                reading r;
-                if (ss >> r.x >> r.y >> r.z) {
-                    csv_file << r.x << "," << r.y << "," << r.z << endl;
+            buf.insert(buf.end(), buffer, buffer + bytes_read);
+
+            while (buf.size() >= 15) {
+                if (buf[0] != 0x55 || buf[1] != 0xAA) {
+                    buf.erase(buf.begin());
+                    continue;
                 }
-                
+                uint8_t checksum = 0;
+                for (int i = 2; i < 14; i++) {
+                    checksum ^= buf[i];
+                }
+
+                if (checksum != buf[14]){
+                    buf.erase(buf.begin());
+                    continue;
+                }
+
+                float x = print_float(&buf[2]);
+                float y = print_float(&buf[6]);
+                float z = print_float(&buf[10]);
+
+                buf.erase(buf.begin(), buf.begin() + 15);
+
+                csv_file << x << "," << y << "," << z << endl;
+            
             }
         }
+
+       
     }
 
     csv_file.close();
 
 
 }
+
+float print_float (const uint8_t *src) {
+    float value;
+    memcpy(&value, src, 4);
+    return value;
+}
+
